@@ -20,7 +20,7 @@ Application
 
 每一层只和对应的层交流，通过调用对下一层的API来利用下一层的服务，**socket**就是应用层对运输层的API
 
-![4layer](D:\gzc\Downloads\Introduction to Computer Networking\note\4layer.PNG)
+![4layer](4layer.PNG)
 
 a **packet** has two types of fields: header fields and a payload field. The payload is typically a packet from the layer above.
 
@@ -56,7 +56,7 @@ a **hop** is a link between two routers
 
 传输packet的过程：
 
-![IMG_4257](D:\gzc\Downloads\Introduction to Computer Networking\note\IMG_4257.JPG)
+![IMG_4257](IMG_4257.JPG)
 
 Network layer is responsible for delivering packets to computers 
 
@@ -102,7 +102,7 @@ layer只和上下层的layer交流，下层layer为上层提供了well-defined s
 
 ## 1-7: The Principle of Encapsulation
 
-![Packet](D:\gzc\Downloads\Introduction to Computer Networking\note\Packet.png)
+![Packet](Packet.png)
 
 Encapsulation allows you to layer recursively, 比如TCP segment可以在另一个TCP segment，应用VPN(virtual private network)
 
@@ -118,9 +118,9 @@ Encapsulation is how layering manifests in data representation
 
 ##  1-8: Byte order and packet formats
 
-![endian](D:\gzc\Downloads\Introduction to Computer Networking\note\endian.PNG)
+![endian](endian.PNG)
 
-![endian quiz](D:\gzc\Downloads\Introduction to Computer Networking\note\endian quiz.JPG)
+![endian quiz](endianQuiz.JPG)
 
 **Internet**使用的协议都是**big endian**，即packet to be in a big endian format
 
