@@ -187,7 +187,7 @@ LPM意味着如果IP address和多个CIDR entry匹配，选prefix`x`大的
 
 举例：（1）网关：the gateway or router has multiple interfaces, each with their own link layer address to identify the card, and also each with their own network layer address to identify the host within the network that card is part of.
 
-![encapsulation ](encapsulation .png)
+![encapsulation](encapsulation.png)
 
 （2）PC has Ethernet card and wireless card, each has their own IP address and link layer address
 
