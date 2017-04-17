@@ -72,6 +72,8 @@ Transport layer is responsible for delivering packets to applications
 
     >**Traceroute** is a software program that displays the connection (path) through the Internet between this traceroute server and the location you enter above.  The Internet path between the two locations has many routers, computers and other devices along it which help move your information.  Each device along this path looks at your request and then sends it off to the next device until it reaches its destination. The Traceroute program shows the amount of time each device on the route takes to do three things: (1) receive the traceroute request (ICMP), (2) process that request and (3) send it back.  Traceroute performs this test three times on each device (each device is called a "hop").
 
+  - windows中是`tracert` 
+
 ## 1-5: The Principle of Packet Switching
 
 **Packet switching** is the idea that we break our data up into discrete, self-contained chunks of data. Each chunk, called a **packet**, carries sufficient information that a network can deliver the packet to its destination. 
@@ -143,6 +145,7 @@ network (byte) order is big endian，网络编程时需要将**network order**�
 
 
 - 连续的1，从最高位开始
+- `if IP address1 && netmask == IP address2 && netmask`, then they belong to the same subnet
 
 ### IP address如何分配的
 
@@ -154,7 +157,7 @@ network (byte) order is big endian，网络编程时需要将**network order**�
 
   address block/CIDR block：`a.b.c.d/x` describes 2^(32-x) addresses
 
-  `x` is so called CIDR **address/prefix**, when we talk about a CIDR address, we refer to its netmask length
+  `x` is so called **CIDR address/prefix**, when we talk about a CIDR address, we refer to its netmask length
 
 - 现实中的实现：
 
@@ -193,7 +196,7 @@ LPM意味着如果IP address和多个CIDR entry匹配，选prefix`x`大的
 
 ### ARP过程
 
-ARP用于由IP address找到link layer address(MAC address)，仅为同一子网中的主机和路由器
+ARP用于由IP address找到link layer address(MAC address, MAC地址是随网卡预置的)，仅为同一子网中的主机和路由器
 
 过程：
 
@@ -213,3 +216,130 @@ ARP用于由IP address找到link layer address(MAC address)，仅为同一子网
 ### 总结：发送IP datagram的过程（结合ARP）
 
 ![IMG_4275](IMG_4275.JPG)
+
+## 2-0: Transport
+
+Network layer的服务是在主机间传输数据
+
+Transport layer的基本服务是在进程间传输数据，包括**多路复用(multiplexing)**和**多路分解(demultiplexing)**
+
+一个进程有一个或多个套接字(socket)，The job of delivering the data in a transport-layer segment to the correct socket is called **demultiplexing**. The job of gathering data chunks at the source host from different sockets, encapsulating each data chunk with header information (that will later be used in demultiplexing) to create segments, and passing the segments to the network
+layer is called **multiplexing**. 
+
+更通用的讲，whenever a single protocol at one layer (at the transport layer or elsewhere) is used by multiple protocols at the next higher layer，就会有multiplexing and demultiplexing 
+
+## 2-1: TCP service model
+
+TCP establish a two-way communication channel between the TCP peers at both ends. We call the two way communication a **connection**. At both ends of the connection, TCP keeps a **state machine** to keep track of how the connection is doing. 
+
+### TCP提供哪些服务
+
+![TCP_service_model](TCP_service_model.png)
+
+### TCP过程
+
+![IMG_4280](IMG_4280.JPG)
+
+### TCP segment构成
+
+TCP将应用要传输的数据看成byte stream，sequence number和acknowledgment sequence number就是指在应用数据byte stream中的位置，而不是在TCP segments中的位置。
+
+TCP’s use of sequence numbers reflects this view in that sequence numbers are over **the stream of transmitted bytes** and not over the series of transmitted segments.
+
+The Sequence number indicates **the position in the byte stream** of the **first byte in the TCP Data field**
+
+ACK表明该值之前的bytes都收到了，下次从该值除的byte开始接收
+
+## 2-2: UDP service model
+
+UDP(User Datagram Protocol/User Demultiplexing Protocol)
+
+### UDP服务
+
+![UDP_service_model](UDP_service_model.png)
+
+### UDP datagram构成
+
+the UDP checksum calculation also includes a portion of the IPv4 header as well, including the IP source and destination addresses and the protocol ID which has the value of 17 and tells us that the IP datagram carries UDP data. It allows the UDP layer to detect datagrams that were delivered to the wrong destination.
+
+### 使用UDP的application
+
+一类应用仅仅是request-response，request都在一个UDP datagram中，If the request is unsuccessful, it simply times out and is resent. 
+
+- DNS(domain name system): turn a hostname into an IP address, the request is fully contained in one UDP datagram
+- DHCP(Dynamic Host Configuration Protocol): DHCP helps a new host find out its IP address when it joins a network. 
+
+另一类应用是自己实现retransmission
+
+- A few real-time streaming audio and video services
+- Early versions of NFS(the network file system)
+
+## 2-3: ICMP service model
+
+ICMP(Internet Control Message Protocol)是Transport Layer的protocol，但描述的是Network Layer的信息, 为Network Layer服务
+
+### ICMP message构成
+
+![ICMP_format](ICMP_format.jpg)
+
+### 使用ICMP的application
+
+- ping
+
+  source host sends a Echo Request type ICMP message to destination host
+
+  destination host sends a  Echo Response type ICMP message back
+
+- traceroute：得到source host到达每个router和destination host的round trip delay
+
+  1. source host发送UDP segment，其port number故意设置为不可用，IP datagram中的TTL field由1开始增加；
+  2. 当TTL减为0时，router会发送给source host一个TTL Expired ICMP message；
+  3. 当destination host最终收到UDP segment，找不到port，会发送给source host一个port un-reachable ICMP message；
+  4. source host收到后停止发送UDP segment
+
+## 2-4: End-to-end principle
+
+### end-to-end principle
+
+要想正确实现endpoint需要的功能，需要endpoint的相关信息，因此network不可能实现；
+
+不过，出于提高performance的目的，network可以实现部分功能；
+
+但是，最终保证endpoint功能正确性的责任，还是落在endpoint上
+
+举例
+
+- file transfer
+
+  虽然link layer有error detection，不过这仅保证传输过程没有错误，不保证在endpoint上的储存没有错误。因此，保证文件正确到达的唯一方法只有end-to-end check
+
+- TCP reliable delivery
+
+  wireless link layers improve their reliability by retransmitting at the link layer. TCP will work correctly -- it will reliably transfer data -- **without this link layer help**. But the link layer help greatly improves TCP’s performance.
+
+### strong end-to-end principle
+
+功能不能在network中实现（一点儿也不行），只能在fringes处实现
+
+因为如果出于某些performance的考虑，在network实现了endpoint部分功能，那么这些功能是基于endpoint的某些假设实现的，那么今后其他的endpoint都要受限于network这些假设。
+
+即虽然network获得短期的性能提升，不过导致network未来难以改变。
+
+## 2-5: Error detection
+
+### 各种error detection算法能够检测出那些错误
+
+|            | Checksum           | CRC(Cyclic Redundancy Check)             | MAC(Message Authentication Code) |
+| ---------- | ------------------ | ---------------------------------------- | -------------------------------- |
+| 100%检测出的错误 | a single bit error | a single burst of errors ≤ c bits long; an odd number of bit errors;  2 bits in error | None                             |
+| 很大可能检测出的   | None               | `1 - 1 / 2^c`                            | `1 - 1 / 2^c`                    |
+| 采用该算法的协议   | IP TCP             | Ethernet                                 | TLS                              |
+
+### 各种算法如何实现(简要)
+
+[burst error](https://en.wikipedia.org/wiki/Burst_error#cite_note-1) 
+
+个人理解：
+
+- a burst error of n bits error：连续n bits的错误
+- burst error length：首个错误bit和最后一个错误bit之间的距离
