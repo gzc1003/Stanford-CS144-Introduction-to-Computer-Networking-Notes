@@ -14,7 +14,7 @@ Link: packet is called **frame**
 
 Network: packet is called **datagram**, 如果使用**Internet**，network层必须使用IP  
 
-Transport: packet is called **segment**
+Transport: TCP packet is called **segment**, UDP packet is called datagram, ICMP packet is called message
 
 Application: called **message** 
 
@@ -25,6 +25,8 @@ Application: called **message**
 a **packet** has two types of fields: header fields and a payload field. The payload is typically a packet from the layer above.
 
 a **hop** is a link between two routers
+
+理解protocol：A **protocol **defines the format and the order of messages exchanged between two or more communicating entities, as well as the actions taken on the transmission and/or receipt of a message or other event.
 
 ## 1.3 The IP Service Model
 
@@ -248,7 +250,7 @@ TCP’s use of sequence numbers reflects this view in that sequence numbers are 
 
 The Sequence number indicates **the position in the byte stream** of the **first byte in the TCP Data field**
 
-ACK表明该值之前的bytes都收到了，下次从该值除的byte开始接收
+ACK表明该值之前的bytes都收到了，下次从该值处的byte开始接收
 
 ## 2-2: UDP service model
 
@@ -343,3 +345,173 @@ ICMP(Internet Control Message Protocol)是Transport Layer的protocol，但描述
 
 - a burst error of n bits error：连续n bits的错误
 - burst error length：首个错误bit和最后一个错误bit之间的距离
+
+## Finite State Machines(FSM)
+
+state 
+
+event：event that can cause a state transition
+
+action：the action the **protocol** takes on making that state transition
+
+## Reliable Communications
+
+### 实现可靠连接需要解决以下问题：
+
+- 如何发现丢包，如何保证包的顺序
+- 发现丢包后如何重传
+- 实现可靠连接可以不在双方维持状态，不过，Reliable communication typically benefits from have some state on each，由此产生的问题是：
+  - 如何设置这些状态
+  - 如何清除这次状态
+
+### Flow control
+
+解决的问题：Don’t send more packets than receiver can process
+
+方法：
+
+#### 1. stop and wait protocol
+
+- At most one packet in flight at any time
+- at most one packet的理解：被发送的、未被确认的packet数目为1
+
+#### 2. sliding windows protocol
+
+- At most N packets in flight at any time:Allow a “window” of unacknowledged packets in flight
+
+- retransmission的表现：
+
+  - RWS=1，protocol表现为GBN
+  - SWS=RWS=N>=1，protocol表现为SR
+
+- 根据RWS(receive window size)、SWS(send window size)确定sequence number:
+
+  Supposed packets not delayed multiple timeouts, at least need RWS+SWS sequence numbers，
+
+  关键需要足够的sequence number解决flow control中的duplicates问题，即how to detect duplicates, 如何检测新的packet，还是超时重传的以前已经接受到的packet
+
+  原因：
+
+  假如SWS=3，RWS=2，sequence number为3，即packet编号为0,1,2,0,1,2...(至少如此才能保证一个send window中的packet编号不同)，主机A为发送方，B为接收方。
+
+  当B接收到第一、二、三的包(0,1,2)，交付给上层应用，发送三个ACK，接下需要第四、五个包(0,1)；
+
+  三个ACK全部lost，则超时后，A会重传第一、二、三的包(0,1,2)，此时接收方B无法分辨出0,1是新的包(第四、五个包)，还是重传的已经接收的包；
+
+  当sequence number为5，即packet编号为0,1,2,3,4；依然是上面的情况，B接下需要编号为3,4的包；此时新的包(3,4)与重复的包(0,1)就区分开了。而且，当B再次需要新的编号为0的包的时候，即B已接收并交付3,4，主机A处旧的编号为0的包一定已经ACK(否则B不能接收到3,4，因为SWS=3)，因此A发送过来的编号为0的包一定为新的包，不会有歧义，如图
+
+  ![IMG_4285](IMG_4285.JPG)
+
+### Retransmission strategies(*Top-down* P147-154)
+
+#### 回退N步GBN(Go-Back-N): RWS=1
+
+发送方使用一个retransmit timer，收到一个ACK，timer被重启
+
+某个packet超时，则认为该packet丢失，重传整个send window，即重传所有已发送带还未确认过的packet
+
+采用**cumulative ACK**，表明ACK number n以前及n在内的packets被正确接收
+
+接收方不缓存乱序的packet，直接丢弃
+
+#### 选择重传SR(Selective Repeat)
+
+为每个packet维持一个timer
+
+只有每个packet的timer超时，才认为该（一个）packet丢失，只重传该packet
+
+采用selective ACK，ACK number为刚刚正确收到packet的sequence number
+
+接收方缓存乱序的packet，If this packet has a sequence number equal to the base of the receive window, then this packet, and any previously buffered and consecutively numbered  packets are delivered to the upper layer
+
+#### GBN和SR的优劣：
+
+if there are bursts of losses, GBN is faster
+
+假设一组连续的包丢失，SR需要等待其中的每一个packet的timer超时，才会重传该packet，由此计入了每个packet的timer和round trip time
+
+而GBN则只需要等待一次timer超时，就会重传所有的包，timer和round trip time只计一次
+
+### TCP实现可靠传输(P163-P169)
+
+TCP的ACK、timer部分像GBN
+
+TCP的重传、乱序的处理像SR
+
+- timer：推荐使用一个retransmit timer
+
+- TCP的ACK：基于byte，而非packet；cumulative ACK, 而且ACK number是指接下来要接收byte的sequence number
+
+- TCP对乱序packet的处理：没有明确规定，可以丢弃，可以缓存(实际中采用)
+
+- TCP的重传：for N packets, *n*th packet lost, but the remaining N – 1 acknowledgments arrive at the sender before their respective timeouts. In this example, GBN would retransmit not only packet n, but also all of the subsequent packets n + 1, n + 2, . . . , *N*. TCP, on the other hand, would retransmit at most one segment, namely, segment *n*. Moreover, TCP would not even retransmit segment n if the acknowledgment for segment n + 1 arrived before the timeout for segment *n*.
+
+- TCP中的flow control：采用sliding window
+
+  The TCP packet header includes a window size field for each side to communicate how large its receive window is.
+
+  - receiver在TCP header中的window field设置RWS：
+
+    `RWS = RcvBuffer – [LastByteRcvd - LastByteRead]` 
+
+    其中LastByteRead: the number of the last byte in the data stream read from the buffer by the application process
+
+    LastByteRcvd: the number of the last byte in the data stream that has arrived from the network and has been placed in the receive buffer
+
+    ![rwnd](rwnd.PNG)
+
+  - sender需要保证：`LastByteSent - LastByteAcked <= RWS` 
+
+  - 当`RWS == 0`时，sender时不时发送仅含一个byte的“窗口探测”segment，以获取新的窗口大小的信息
+
+### TCP Connection setup and teardown
+
+#### setup
+
+3-way handshake
+
+simultaneous open
+
+![three-handshake](three-handshake.JPG)
+
+#### teardown
+
+a SYN or FIN in a TCP segment consume a sequence number, it's so that the SYN and FIN themselves can be acknowledged (and therefore re-sent if they're lost).
+
+![teardown](teardown.JPG)
+
+- simultaneous close
+
+![simultaneous_close](simultaneous_close.JPG)
+
+- TIME_WAIT状态的作用
+
+  -  to make sure that the final ACK is not lost
+
+  - to avoid data corruption in the case that ports are immediately reused and there is a sequence number overlap
+
+    https://vincent.bernat.im/en/blog/2014-tcp-time-wait-state-linux
+
+- active close side如何确认它回复的ACK被passive close side成功接收了？
+
+  如果passive close side没有收到ACK，会继续发FIN，只要active close side在2MSL中没有再收到FIN，则说明passive close side成功收到ACK。
+
+  The final ACK is resent not because the TCP retransmits ACKs, but because the other side will retransmit its FIN. Indeed, TCP will always retransmit FINs until it receives a final ACK
+
+![TCP_states](TCP_states.png)
+
+## 网络工具使用
+
+wireshark
+
+nslookup: domain name to IP address
+
+telnet: 
+
+1. `telnet IP address port`
+2. `ctrl + ]`
+3. 进入telent后，回车进入编辑界面，编写要发送的HTTP message
+
+ping
+
+tracert
