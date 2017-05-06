@@ -1,4 +1,4 @@
-# Introduction to Computer Networking
+# Unit 1: The Internet and IP
 
 ## 1.1 A day in the life of an application  
 
@@ -218,6 +218,8 @@ ARP用于由IP address找到link layer address(MAC address, MAC地址是随网�
 ### 总结：发送IP datagram的过程（结合ARP）
 
 ![IMG_4275](IMG_4275.JPG)
+
+# Unit 2: Transport
 
 ## 2-0: Transport
 
@@ -515,3 +517,239 @@ telnet:
 ping
 
 tracert
+
+视频：
+
+​	CSAPP 21-netprog1
+
+​	CSAPP 22-netprog2
+
+​	[1-4: A day in the life of a packet](https://lagunita.stanford.edu/courses/Engineering/Networking-SP/SelfPaced/courseware/ac9d1eef5aaa4bb5bcfe4d42f51f0f5b/d38948f20a2249508e3fc8c675b2738c/)
+
+​	[2-11: Reliable Communications - Connection setup and teardown](https://lagunita.stanford.edu/courses/Engineering/Networking-SP/SelfPaced/courseware/c43cc41ee5764363b36ddd99c8b32f26/939e91b43c124bbb913616f6cc6f9c5b/)
+
+​	[Wireshark Tutorial for Beginners](https://www.youtube.com/watch?v=TkCSr30UojM&t=319s)
+
+# Unit 3: Packet Switching
+
+## 本单元回答以下问题
+
+1. understand the three main components of packet delay: the packetization delay, the propagation delay, and the queuing delay; and that you understand the physical processes that cause them
+2. understand why routers have buffers, and how queuing delay leads to uncertainty about when packets will arrive. how playback buffers are designed for real time streaming applications
+3. how packet switches work in practice “How does an Internet router actually work?”, and “How is it different from an Ethernet switch?”. “How does a router arrange its lookup tables?”
+
+## Packet Switch
+
+### Internet使用packet switching的原因
+
+- Efficient use of expensive links
+- Resilience to failure of links & routers
+
+### 组成
+
+- buffer
+
+  two packets showed up at the same time wanting to travel across the same link, then some of the packets have to wait in the router’s queue, or packet buffer
+
+- forwarding table 
+
+  | address | next-hop |
+  | ------- | -------- |
+  |         |          |
+
+### 过程
+
+lookup address --> may update header --> queue packet
+
+![generic_packet_switch](generic_packet_switch.png)
+
+#### Lookup address
+
+- 硬件层实现
+
+#### Switch packets to egress port
+
+- **output queue**
+
+  An output-queued switch is perfect in the sense that you can't achieve a higher throughput, or you can't achieve a lower average delay. 
+
+  **work conserving**: an output line is never idle when there is a packet in the system waiting to go to it
+
+  ![output_queue](output_queue.png)
+
+- **input queue**
+
+  ![input_queue](input_queue.png)
+
+- **virtual output queue**: no packet can be held up by a packet ahead of it going to a different output
+
+  ![VirtualOutputQueues](VirtualOutputQueues.png)
+
+- input queue比output queue的好处:
+
+  Only require memory bandwidth of 2 * R instead of (N+1) * R for an output queued switch.
+
+- virtual output queue比input queue的好处：消除了**head of line blocking**
+
+### 分类
+
+| Router                          | Ethernet switch                          |
+| ------------------------------- | ---------------------------------------- |
+| 属于link layer和internet layer     | 属于link layer                             |
+| 基于网络层字段中的值做转发决定                 | 基于链路层字段中的值做转发决定                          |
+| 具有IP address和link layer address | 不具有与其接口相关联的链路层地址，即主机或路由器无需明确将帧寻址到期间的交换机(*p307*) |
+| 需要ARP                           | 不需要ARP                                   |
+
+#### **Router**
+
+- 详细过程
+  1. Ethernet DA是否属于router，否则丢弃，不向上层传递
+  2. 减少TTL，update IP header checksum
+  3. lookup IP DA in forwarding table
+  4. find Ethernet DA for next hop router using **ARP**
+  5. create a new Ethernet frame and send it
+
+
+- lookup address: 
+  - Longest prefix match
+    - Binary tries
+    - Ternary Content Addressable Memory (TCAM): binary value + mask
+
+#### **Ethernet switch**
+
+- 详细过程
+  1. 检查到达frame的header
+  2. 如果Ethernet destination address在forwarding table中，转发至正确port；不在，广播该frame
+  3. forwarding table是通过Ethernet switch自学习建立的，将到达frame的Ethernet SA加入到表中
+- lookup address: 
+  - hash table
+  - exact match
+
+switching的方式有两种：
+
+- store and forward: wait until the whole packet arrives until they look up the address and decided where to send it next, 比如Internet router
+
+
+- cut through: start forwarding the packet after they’ve seen the header and not wait for the whole packet to arrive
+
+## End-to-end delay
+
+- propagation delay
+
+- packetization delay
+
+  data rate/the number of bits per second that we can put onto the link
+
+
+- queuing delay
+
+congestion: lots of packets queued waiting to travel along the link
+
+## Playback Buffer
+
+![playback](playback.png)
+
+## Simple Deterministic Queue Model
+
+### Simple deterministic queue model
+
+![deterministic_queue_model](deterministic_queue_model.JPG)
+
+### Small packets reduce end to end delay
+
+![small_packet](small_packet.png)
+
+![small_packet](small_packet.JPG)
+
+### Statistical multiplexing
+
+Multiplexing == sharing. Statistical multiplexing == sharing using the statistics of demand.
+
+**statistical multiplexing**：由于多条输入链路data rate的峰值是错开的，使得平均data rate平稳，则对输出链路的data rate的要求小于多条输入链路的峰值之和
+
+![Statistical_multiplexing](Statistical_multiplexing.png)
+
+**Statistical multiplexing gain**
+
+- 考虑buffer
+- 不考虑buffer
+
+![Statistical_multiplexing_gain](Statistical_multiplexing_gain.png)
+
+## Queuing Model Properties
+
+- Little's Result: `L=λ*d`
+
+  L: a average occupancy of a queue
+
+  d: average delay
+
+  λ: average arrival rate
+
+  ![little_result](little_result.PNG)
+
+## Rate guarantee
+
+how to serve every queue in a router at a minimum rate
+
+If all packets were the same length, this would be trivial. But different packets have different lengths, so we need to take into consideration how long each packet is. This is where **Weighted Fair Queuing** comes in. It tells us the correct order to serve packets in the router queues, so as to take into consideration the length of individual packets.
+
+- delay through the queue <= B/R
+
+  size of the queue: B
+
+  the rate at which it's being served: R
+
+![FIFO](FIFO.png)
+
+- **FIFO queues** are a free for all: 
+
+  No priorities and no guaranteed rates
+
+- Strict priorities queue
+
+  根据IP header中的type of service field
+
+- **Weighted Fair Queuing(WFQ)**
+
+  lets us give each flow a guaranteed service rate, by scheduling them in order of their **bit-by-bit finishing times**
+
+  证明WFQ可以保证rate？
+
+  - 证明过程
+    1. 证明：采用bit-by-bit可以实现rate guarantee
+    2. 证明：packet-by-packet的finish time比bit-by-bit的finish time晚一些
+    3. 证明：调度器按照bit-by-bit的finish time调度，实际的finish time是按照packet-by-packet；不过时间足够长时，实际depart的bits数量和bit-by-bit下depart的bits数量相同，即和bit-by-bit下rate的公式相同，实现了rate guarantee
+  - 引入magic queue
+
+## Delay guarantee 
+
+- delay <= B/R
+
+  - 可以通过WFQ控制R
+  - 可以设置B
+
+- 如何做到不丢包?
+
+  - 采用*(sigma, rho) regulation*
+
+    - serve rate >= rho
+    - B >= sigma
+
+    ![IMG_4300](IMG_4300.JPG)
+
+- 如何实现(sigma, rho) regulation
+
+  - 在source端通过leaky bucket实现
+
+- 如何设置在path上的sigma, rho, serve rate和B
+
+​	**Resource Reservation Protocol(RSVP)**
+
+- 整体过程
+
+  If flows are leaky-bucket constrained, and routers use WFQ, then end-to-end delay guarantees are possible.
+
+  ![delay_guarantee](delay_guarantee.png)
+
+  ​
