@@ -5,7 +5,7 @@
 Common communication model of networked applications: a bidirectional, reliable byte stream
 
 - client-server model: World Wide Web，简称Web(using HTTP)
-- peer-to-peer model: BitTorrent(Tracker)
+- peer-to-peer model: BitTorrent(tracker, swarm, torrent)
 - skype: rendezvous or relay server
 
 ## 1.2 The 4 layer Internet model 
@@ -140,6 +140,7 @@ network (byte) order is big endian，网络编程时需要将**network order**�
 
 - 32 bits, written as 4 octets, `a.b.c.d`
 - IP address是与主机或路由器的**接口(Interface)**相关联的，主机和物理链路的边界叫做**接口(Interface)**，路由器有多个接口，继而多个IP address
+- Internet中每台主机和路由器上的每个接口，必须有一个全球唯一的IP address(NAT例外)
 
 ### Netmask:
 
@@ -198,9 +199,9 @@ LPM意味着如果IP address和多个CIDR entry匹配，选prefix`x`大的
 
 ### ARP过程
 
-ARP用于由IP address找到link layer address(MAC address, MAC地址是随网卡预置的)，仅为同一子网中的主机和路由器
+ARP用于由IP address找到link layer address(MAC address, MAC地址是随网卡预置的)，仅为在同一子网中的主机和路由器
 
-过程：
+过程(*p310*)：
 
 0. Every node keeps a cache of mappings from IP addresses on its network to link layer addresses. 
 
@@ -253,6 +254,8 @@ TCP’s use of sequence numbers reflects this view in that sequence numbers are 
 The Sequence number indicates **the position in the byte stream** of the **first byte in the TCP Data field**
 
 ACK表明该值之前的bytes都收到了，下次从该值处的byte开始接收
+
+**port field**: 16bits
 
 ## 2-2: UDP service model
 
@@ -496,7 +499,7 @@ a SYN or FIN in a TCP segment consume a sequence number, it's so that the SYN an
 
 - active close side如何确认它回复的ACK被passive close side成功接收了？
 
-  如果passive close side没有收到ACK，会继续发FIN，只要active close side在2MSL中没有再收到FIN，则说明passive close side成功收到ACK。
+  如果passive close side没有收到ACK，会继续发FIN，只要active close side在2MSL(Maximum Segment Lifetime)中没有再收到FIN，则说明passive close side成功收到ACK。
 
   The final ACK is resent not because the TCP retransmits ACKs, but because the other side will retransmit its FIN. Indeed, TCP will always retransmit FINs until it receives a final ACK
 
@@ -544,6 +547,8 @@ tracert
 
 - Efficient use of expensive links
 - Resilience to failure of links & routers
+
+**packets share the same link**：当多个packets同时出现且想去同一个link时，由于packet switch send packet-by-packet, 所以某些packet需要在switch queue中等待。
 
 ### 组成
 
@@ -593,12 +598,13 @@ lookup address --> may update header --> queue packet
 
 ### 分类
 
-| Router                          | Ethernet switch                          |
-| ------------------------------- | ---------------------------------------- |
-| 属于link layer和internet layer     | 属于link layer                             |
-| 基于网络层字段中的值做转发决定                 | 基于链路层字段中的值做转发决定                          |
-| 具有IP address和link layer address | 不具有与其接口相关联的链路层地址，即主机或路由器无需明确将帧寻址到期间的交换机(*p307*) |
-| 需要ARP                           | 不需要ARP                                   |
+| Router                                   | Ethernet switch                          |
+| ---------------------------------------- | ---------------------------------------- |
+| 属于link layer和internet layer              | 属于link layer                             |
+| 基于网络层字段中的值做转发决定                          | 基于链路层字段中的值做转发决定                          |
+| 具有IP address和link layer address          | 不具有与其接口相关联的链路层地址，即主机或路由器无需明确将帧寻址到其间的交换机(*p307*) |
+| 需要ARP                                    | 不需要ARP                                   |
+| receives routing protocol messages来设置forwarding table | 自学习来设置                                   |
 
 #### **Router**
 
@@ -744,7 +750,7 @@ If all packets were the same length, this would be trivial. But different packet
 
 - 如何设置在path上的sigma, rho, serve rate和B
 
-​	**Resource Reservation Protocol(RSVP)**
+  ​**Resource Reservation Protocol(RSVP)**
 
 - 整体过程
 
@@ -753,3 +759,369 @@ If all packets were the same length, this would be trivial. But different packet
   ![delay_guarantee](delay_guarantee.png)
 
   ​
+
+
+# Unit 5: Applications and NATs
+
+## 本单元需要掌握
+
+- Application层
+  1. DNS using UDP, client-server model
+  2. HTTP or World Wide Web using TCP, client-server model
+  3. BitTorrent, using TCP, peer-to-peer model
+  4. DHCP
+- NATs
+  - multiple endpoints/a network hide behind a single IP address
+  - translating addresses primarily in the direction that goes from the edge towards the core, makes it hard for application that wants to initiate communication with an edge device
+
+## NAT(network address translator)
+
+when packet **traverses** the NAT, the NAT translate the network address, rewrites source address and source port.
+
+mapping (internal IP, port) pair to (external IP, port) pair
+
+local private IP address in 10. range or 192.168. range
+
+硬件：NAT通常运行在路由器中
+
+### 好处
+
+- share public IP address
+- security
+
+
+### 类型(What packets does a NAT allow to traverse mappings? )
+
+1. full cone NAT
+2. restricted cone NAT
+3. port restricted NAT
+4. symmetric NAT: port restricted
+
+1,2,3是只要internal IP address和port相同，就是同一个mapping
+
+4即使internal IP address和port相同，但destination address不同，也是不同的mapping，即external port不同
+
+- symmetric NAT带来的问题？
+
+  [Symmetric NAT and It’s Problems](https://www.think-like-a-computer.com/2011/09/19/symmetric-nat/)
+
+- What happens when you have a node that's behind your NAT. And it sends a packet to one of the external interface port pairs that the NAT has?
+
+  **Hairpinning**
+
+  ![hairpinning](hairpinning.JPG)
+
+### NAT的影响
+
+- 对application的影响
+
+  NAT allow connections out, but don't allow connections in.
+
+  因为从NAT的external到internal需要mapping，而mapping只能在packet从internal到external时建立， server/client behind NAT don't issue connection requests out
+
+- application的应对方法
+
+  - connection reversal: use rendezvous server
+
+  - relays
+
+  - NAT hole-punching:
+
+    1. A, B are both behind NATs
+    2. 通过external server得知external IP address and port
+    3. A, B同时向对方send traffic, 得以在mapping添加对方IP address, 使得到达的对方的packet可以traverse the NAT
+
+    full cone NAT, restricted cone NAT, port restricted NAT均支持这种方法
+
+    symmetric NAT不支持
+
+- 对Transport Layer的影响
+
+  No new transport protocol
+
+  因为NAT需要知道采用的transport protocol
+
+- 对Internet的影响
+
+  narrow waist IP --> the new hourglass
+
+  ![hourglass](hourglass.png)
+
+### Behavior
+
+- **static mapping**
+
+  A static mapping is configured so that traffic is always mapped a specific way. You could map all traffic to and from a specific private network location to a specific Internet location. For instance, to set up a Web server on a computer on your private network, you create a static mapping that maps [Public IP Address, TCP Port 80] to [Private IP Address, TCP Port 80].
+
+  [Static and Dynamic Address Mapping](https://technet.microsoft.com/en-us/library/cc957905.aspx?f=255&MSPPError=-2147217396)
+
+- **port triggering**
+
+  *Port triggering* opens an incoming port when the user's computer is using a specified *outgoing port* for specific traffic.
+
+  [Port Triggering](http://kmlstudy.blogspot.com/2008/06/router-port-triggering.html)
+
+- **How would the NAT respond if you tried to open a connection to it?**
+
+  the NAT behaves like a normal IP device or an IP router with the exception of, when packets come to the external interface that have a mapping or when packets traverse from the internal interface and generate a mapping. NAT can respond to connections.
+
+- **When does a NAT set up mapping and when to tear down them?**
+
+  - set up
+
+    when a packet comes from the internal interface going to external. The NAT sets up a mapping, mapping that IP address, port to an external IP address, port.
+
+  - tear down
+
+    - UDP time out
+    - TCP see FIN/ACK 
+
+- **RFC behavioral recommendations for NAT**
+
+  - UDP
+
+    1. NAT不能是symmetric NAT
+    2. 如果NAT有多个external address, UDP packets coming from the same internal IP address, should appear to have the same external IP address. 
+    3. if the internal port is between zero and 1023, then the external port should be between zero and 1023. If it's in 1024 to 65535, then the external should be between 65535
+    4. ...
+
+  - TCP
+
+    1. NAT不能是symmetric NAT
+
+    2. NAT需要支持TCP simultaneous open, 更general的说法, NAT需要支持任何一种TCP state diagram中open a connection的方法
+
+       ![TCP_NAT](TCP_NAT.png)
+
+    3. NAT是full cone NAT
+
+    4. a NAT must not respond to an unsolicited inbound SYN for at least six seconds
+
+       因为如果过早的send ICMP error, 会过早的tear down mapping state
+
+       ![TCP_NAT_wait](TCP_NAT_wait.png)
+
+    5. ...
+
+    ​
+
+
+## HTTP
+
+- HyperText: 
+
+  - ASCII text
+
+    The bits of the image aren’t stored in this hypertext document. That wouldn’t be human readable ASCII text. Instead, there’s a way to, in a hypertext document, say “load this other document and put it here.” 
+
+- **HTTP message(HTTP报文): ASCII text**
+
+  URL: ASCII
+
+
+- 掌握通过画图分析HTTP request/response的时间
+  - 全双工(full duplex)意味着: a node can simultaneously receive and transmit on the same link. This means the packetization delay of a request does not affect the packetization delay of a response.
+
+
+- HTTP/1.0
+
+  1. open connection
+  2. Issue GET
+  3. Server closes connection after response
+
+- HTTP/1.1
+
+  **server可以在response后自行选择是否关闭connection**
+
+  - Added Connection header for requests
+
+    **不过connection header just gives server a hint, server can do what it wants**
+
+    - keep-alive: tells the server “please keep this connection open, I’ll request more”
+    - close: tells the server to close the connection
+    - Server can always ignore
+
+  - Added Connection header for responses
+
+    - keep-alive: tells the client it’ll keep the connection open
+    - close: tells the client it’s closing the connection
+
+  - Added Keep-Alive header for responses
+
+    - Tells client how long the connection may be kept open
+
+- SPDY
+
+  - One issue HTTP sometimes runs into is that the order in which a client requests resources is the same that the server responds. 
+
+    If the client requested the slow page first, it won’t receive any of the images until after it receives the page. It would be nice if the server could respond in a different order, and say start sending the images while the page is being generated
+
+
+## BitTorrent
+
+两个关键问题:
+
+1. 先请求哪些pieces？
+
+  **rarest first**
+  - the rarest chunks get more quickly redistributed, aiming to (roughly) equalize the numbers of copies of each chunk in the torrent.
+  - This ensures that the most commonly available pieces are left till the end to download.
+
+2. 向哪些peer发送数据？
+
+  peer可以建立很多TCP connection, 面对向它发送请求的peer，它要想哪些发送数据
+
+  **tit-for-tat**, to discover potentially good new peers, the client also randomly unchokes a peer periodically
+
+![BitTorrent](BitTorrent.png)
+
+## DNS(Domain Name System)
+
+domain name: `bit.edu.cn`
+
+hostname: `www.bit.edu.cn`
+
+### DNS Name Architecture
+
+root: empty name/dot
+
+top-level domain(TLD)
+
+domain 
+
+subdomain
+
+### DNS servers
+
+root DNS server: 13 root server，highly replicated, 利用**anycast**每个server有多个具有相同IP address的主机
+
+TLD server
+
+authoritative DNS server
+
+local DNS server(/default name server/resolver)
+
+### DNS message
+
+#### 分为两类
+
+DNS query message和DNS response message
+
+DNS query的Question数目通常为1，其余为0；
+
+DNS response有Question，Answer数目至少为1
+
+#### 格式
+
+![DNS_message](DNS_message.png)
+
+#### Resource Records
+
+All DNS information represented in Resource Records 
+
+![DNS_RR](DNS_RR.png)
+
+Resource Records分类
+
+- DNS A Record
+
+- DNS AAAA Record
+
+- DNS NS Record
+
+- CNAME Record
+
+  `alias-name [TTL][class] CNAME canonical-name`
+
+  if you there's a CNAME record for a name, there can't be any other records for the name
+
+- MX Records
+
+- PTR: map address to name
+
+#### Name compression
+
+当长度的byte最高两位为1时，name is compressed，剩余位和随后字节中的组成形成一个14位的offset，距离DNS segment开始处的offset
+
+具有相同的suffix才可以压缩表示，因为name从后往前才是DNS name从高到低
+
+#### Glue record
+
+![glue_record](glue_record.png)
+
+DNS use UDP/TCP
+
+when DNS use TCP: Prefix messages with 16-bit length field
+
+原因：DNS的query和response的长度是变化的，封装DNS的包需要指明长度；
+
+UDP segment中具有length field(header plus data), 而TCP segment中只有header length field, requires message boundaries.
+
+> UDP is by definition a packetized transport, where packet boundaries are kept.
+> TCP is stream oriented: no boundaries are guaranteed to go through. For this reason, all TCP variants of packetized transports (SIP, RTP, etc) include an extra prefix giving the length of the data unit.
+>
+
+
+
+## Dynamic Host Configuration Protocol (DHCP)
+
+子网中需要有DHCP server，或者使用路由器作为relays to forward across links；通常说DHCP server运行在路由器中
+
+### Communicating with IP需要
+
+- 必需IP address subnet mask gateway router
+- 非必需DNS server IP address(直接使用IP地址时则不需要)
+
+### DHCP message分类
+
+Discover, offer, request, ack, release
+
+discover的DA使用Broadcast IP address: 255.255.255.255
+
+request的DA使用Broadcast IP address: 255.255.255.255，The packet is sent as a broadcast so that other DHCP servers see that their offer was not chosen and can be withdrawn
+
+offer, ack的DA是否使用广播地址取决于broadcast bit
+
+> "DHCPOFFER" message from DHCP to DHCP Client is unicast or broadcast?
+>
+> In the DHCP discover there is a flag called the broadcast bit that the client uses to tell the server how he would like the offer to be: broadcast if it is on or unicast if it is off but the server  makes the final decision based on its capability.
+
+
+
+## 路由器相关
+
+**LAN**(local area network)局域网
+
+Although there are many types of LAN technologies, Ethernet is by far the most prevalent access technology in corporate, university, and home networks. 
+
+硬件上采用**交换机(switch)**或**集线器(hub)和网桥(bridge)**构成LAN
+
+Hub：不加分辨地将从一个端口上收到的每个位复制到其他所有的端口上
+
+**WAN**(wide area network)广域网：多个不兼容的局域网可以通过路由器连接起来
+
+*CSAPP*第11章
+
+
+
+## 浏览器中输入baidu.com后发生什么
+
+*计算机网络-自顶向下方法* P329
+
+
+
+ICMP 运输层协议
+
+DHCP DNS 应用层协议，封装到UDP中
+
+ARP 网络层协议，封装到链路层帧中，ARP packet包含了SA DA SMAC DMAC， ARP table缓存于主机和路由中，
+
+
+
+Wireshark PDU
+
+It means that Wireshark thinks the packet in question contains part of a packet (**PDU-Protocol Data Unit**) for a protocol that runs on top of TCP，即数据超出了TCP的最大MSS
+
+If the reassembly is successful, the TCP segment containing the last part of the packet will show the packet.
+
+MSS: maximum segment size 最大报文长度， TCP中的概念
