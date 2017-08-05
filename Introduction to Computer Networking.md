@@ -26,7 +26,7 @@ a **packet** has two types of fields: header fields and a payload field. The pay
 
 a **hop** is a link between two routers
 
-理解protocol：A **protocol **defines the format and the order of messages exchanged between two or more communicating entities, as well as the actions taken on the transmission and/or receipt of a message or other event.
+**理解protocol**：A **protocol **defines the format and the order of messages exchanged between two or more communicating entities, as well as the actions taken on the transmission and/or receipt of a message or other event.
 
 ## 1.3 The IP Service Model
 
@@ -41,7 +41,7 @@ a **hop** is a link between two routers
 
 更多服务：
 
-- 防止loop，通过datagram header中的**time to  live(TTL)**阻止
+- 防止loop，通过datagram header中的**time to  live(TTL)**阻止，router将TTL减1
 - 如果Link层允许的packet大小小于datagram的，router可以**fragment** datagram
 - 减小送错datagram的几率，通过datagram header中的**checksum**
 - 允许新的IP版本：ipv4，ipv6
@@ -79,8 +79,6 @@ Transport layer is responsible for delivering packets to applications
 ## 1-5: The Principle of Packet Switching
 
 **Packet switching** is the idea that we break our data up into discrete, self-contained chunks of data. Each chunk, called a **packet**, carries sufficient information that a network can deliver the packet to its destination. 
-
-属于Link层
 
 ### 设计理念
 
@@ -499,6 +497,8 @@ a SYN or FIN in a TCP segment consume a sequence number, it's so that the SYN an
 
 - active close side如何确认它回复的ACK被passive close side成功接收了？
 
+  [Why does a SYN or FIN bit in a TCP segment consume a byte in the sequence number space?](https://stackoverflow.com/questions/2352524/why-does-a-syn-or-fin-bit-in-a-tcp-segment-consume-a-byte-in-the-sequence-number)
+
   如果passive close side没有收到ACK，会继续发FIN，只要active close side在2MSL(Maximum Segment Lifetime)中没有再收到FIN，则说明passive close side成功收到ACK。
 
   The final ACK is resent not because the TCP retransmits ACKs, but because the other side will retransmit its FIN. Indeed, TCP will always retransmit FINs until it receives a final ACK
@@ -696,7 +696,7 @@ Multiplexing == sharing. Statistical multiplexing == sharing using the statistic
 
 ## Rate guarantee
 
-how to serve every queue in a router at a minimum rate
+how to serve every queue in a router at a minimum rate?
 
 If all packets were the same length, this would be trivial. But different packets have different lengths, so we need to take into consideration how long each packet is. This is where **Weighted Fair Queuing** comes in. It tells us the correct order to serve packets in the router queues, so as to take into consideration the length of individual packets.
 
@@ -719,6 +719,10 @@ If all packets were the same length, this would be trivial. But different packet
 - **Weighted Fair Queuing(WFQ)**
 
   lets us give each flow a guaranteed service rate, by scheduling them in order of their **bit-by-bit finishing times**
+
+  ![bitbybit](bitbybit.png)
+
+  ![packetbypacket](packetbypacket.png)
 
   证明WFQ可以保证rate？
 
@@ -750,15 +754,15 @@ If all packets were the same length, this would be trivial. But different packet
 
 - 如何设置在path上的sigma, rho, serve rate和B
 
-  ​**Resource Reservation Protocol(RSVP)**
+  **Resource Reservation Protocol(RSVP)**
 
 - 整体过程
 
   If flows are leaky-bucket constrained, and routers use WFQ, then end-to-end delay guarantees are possible.
 
-  ![delay_guarantee](delay_guarantee.png)
+  ![delay_guarantee](delay_guarantee.png) 
 
-  ​
+- 3-10 00:20:46 example
 
 
 # Unit 5: Applications and NATs
@@ -1045,6 +1049,10 @@ Resource Records分类
 
 具有相同的suffix才可以压缩表示，因为name从后往前才是DNS name从高到低
 
+DNS A Record Answer name may be compressed
+
+DNS NS Record Answer name is compressed
+
 #### Glue record
 
 ![glue_record](glue_record.png)
@@ -1067,9 +1075,11 @@ UDP segment中具有length field(header plus data), 而TCP segment中只有heade
 
 子网中需要有DHCP server，或者使用路由器作为relays to forward across links；通常说DHCP server运行在路由器中
 
+UDP ports 67(server) and 68(client)
+
 ### Communicating with IP需要
 
-- 必需IP address subnet mask gateway router
+- 必需**IP address, subnet mask, gateway/router**
 - 非必需DNS server IP address(直接使用IP地址时则不需要)
 
 ### DHCP message分类
@@ -1125,3 +1135,168 @@ It means that Wireshark thinks the packet in question contains part of a packet 
 If the reassembly is successful, the TCP segment containing the last part of the packet will show the packet.
 
 MSS: maximum segment size 最大报文长度， TCP中的概念
+
+## Unit 4: Congestion Control
+
+### Congestion Control的要求
+
+1. high throughput: maximize link utilization
+2. fair share
+3. avoid congestion collapse, 即保持link full的数据是useful的，而非很多retransmission数据，避免full utilization of link, while simultaneously **no application level throughput**
+
+目标
+
+1. High	throughput: Keep links busy and flows fast
+2. Max-min fairness
+3. Respond quickly to change network conditions
+4. Distributed control
+
+使用fair queuing可以实现Max-min fairness, decompose the output buffer into **per-flow** queues, 不过FQ不responsive
+
+### Congestion Control的实现
+
+- 在network中实现
+
+  ECN(explicit congestion notification), routers indicate congestion
+
+- 在end host实现
+
+  不需要network的support, end-host observe the network behavior(time out and duplicate ACK), TCP Congestion Control，那么如何设置CWND？
+
+  **Optimal congestion window size** is the bandwidth-delay product
+
+### AIMD
+
+**outstanding packet**: unacknowledged packets(have sent, but not yet received an acknowledgement)
+
+~~AIMD controls the rate at which packets are sent~~, it is not strictly true. All AIMD does is control the number of outstanding packets in the network.
+
+#### Single flow
+
+The **sending rate**(R = W / RTT) is constant if we have sufficient buffers (RTT x C)
+
+- 为什么buffer size at least RTT*C？
+
+希望bottleneck link utilization一直为100%
+
+详细解释：
+
+![single_flow1](single_flow1.jpg)
+
+![single_flow2](single_flow2.jpg)
+
+![single_flow3](single_flow3.jpg)
+
+CWND减半后，sender会先暂时停止send，等待buffer排空。因为sliding window限制了outstanding packet的数量为RTT\*C，而此时buffer中就有RTT\*C个packet。
+
+#### Multiple flow
+
+- RTT为常数
+
+  这里的“RTT为常数”是指**每条flow各自**的RTT为常数，
+
+  原因：因为with many flows, each flow follows its own AIMD rule;
+
+  if the bottleneck contains packets belonging to many different flows,then the buffer is going to remain highly occupied all the time. This means the RTT is constant.
+
+- sending rate/throughput = 两次丢包之间send packet数量A /  两次丢包之间时间
+
+  两次丢包之间时间 = RTT \* (Wmax / 2)
+
+  两次丢包之间send packet数量A = sum(Wmax / 2, ..., Wmax)
+
+  packet drop probability p: 每发送A个packet，drop one packet `p = 1/A`
+
+#### 为什么AIMD可以满足Congestion Control的要求？
+
+*Chiu Jain Plot*
+
+![ChiuJain](ChiuJain.png)
+
+无论起点在哪里，最终沿Fair line在desired point(绿点)附近振荡。
+
+### TCP Congestion Control
+
+Three questions that a transport protocol needs to answer, if it is going to provide reliable transport.[理解protocol](#1.2 The 4 layer Internet model)
+
+![three](three.png)
+
+问题1：收到ACK是send new data, self-clocking
+
+问题2：time out, or fast retransmission
+
+问题3：receive new packet
+
+#### Pre-Tahoe
+
+- send **flow control** window size packets
+- start a retransmit timer for each packet
+- no congestion control
+
+#### Tahoe
+
+- Congestion window
+
+  - Exploits TCP’s sliding window used for flow control
+
+    ![TCPWND](TCPWND.png)
+
+  - Tries to figure out how many packets it can safely have outstanding in the network at a time.
+
+- Timeout estimation
+
+  - Pre-Tahoe
+
+    根据RRT的估计值和实测值计算Exponentially weighted moving average(EWMA)，来设置timeout
+
+    缺点：无法应对RTT distribution是变化的
+
+  - Tahoe
+
+    计算RTT的EWMA
+
+    计算variance(实测值与估计值的偏差)的EWMA
+
+    二者结合设置timeout
+
+- Self-clocking
+
+  - TCP only puts a new packet into the network when it receives an acknowledgment or when there‘s a timeout. It means TCP only puts packets into the network when packets have left the network.
+
+  - 使网络上的包数量守恒
+
+    ​
+
+![Tahoe](Tahoe.png)
+
+![tahoe_eg](tahoe_eg.png)
+
+#### Reno
+
+- fast recovery
+- fast retransmit
+
+![reno_eg](reno_eg.png)
+
+#### New Reno
+
+![newreno](newreno.png)
+
+- fast recovery
+
+- fast retransmit
+
+- congestion window inflation: start sending out new packets while fast retransmit is in flight, We don't have to wait for an entire RTT before we can send a new packet. Otherwise, we have to do new retransmission and then we get the acknowledgment we can then move the window forward.
+
+  congestion window inflation的合理性：包守恒理论
+
+  更具体的解释：
+
+  ![IMG_4390](IMG_4390.JPG)
+
+
+
+
+
+![idle](idle.png)
+
